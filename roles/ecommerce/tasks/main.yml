@@ -4,6 +4,7 @@
     name:
       - docker
       - git
+      - nginx
       - python3-pip
     state: present
 
@@ -25,15 +26,6 @@
     curl -SL "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64" -o /usr/local/lib/docker/cli-plugins/docker-compose
     chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
     ln -sf /usr/local/lib/docker/cli-plugins/docker-compose /usr/bin/docker-compose
-
-- name: Verify Docker Compose
-  shell: docker compose version
-  register: compose_version
-
-- name: Remove old app if exists
-  shell: |
-    cd {{ app_dir }} && docker compose down --remove-orphans || true
-  ignore_errors: yes
 
 - name: Remove old directory
   file:
@@ -60,3 +52,15 @@
   become_user: ec2-user
   environment:
     HOME: /home/ec2-user
+
+- name: Copy ShopEasy frontend to Nginx
+  copy:
+    src: "{{ app_dir }}/frontend/index.html"
+    dest: /usr/share/nginx/html/index.html
+    remote_src: yes
+
+- name: Start Nginx
+  service:
+    name: nginx
+    state: restarted
+    enabled: yes
