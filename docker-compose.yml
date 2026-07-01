@@ -1,0 +1,54 @@
+version: '3.8'
+
+networks:
+  ecommerce-net:
+    driver: bridge
+
+volumes:
+  mysql-data:
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: ecommerce-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: ecommerce
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - ecommerce-net
+
+  product-service:
+    build: ./product-service
+    container_name: ecommerce-products
+    restart: unless-stopped
+    environment:
+      DB_HOST: db
+      DB_USER: root
+      DB_PASSWORD: password
+      DB_NAME: ecommerce
+    ports:
+      - "5001:5000"
+    depends_on:
+      - db
+    networks:
+      - ecommerce-net
+
+  order-service:
+    build: ./order-service
+    container_name: ecommerce-orders
+    restart: unless-stopped
+    environment:
+      DB_HOST: db
+      DB_USER: root
+      DB_PASSWORD: password
+      DB_NAME: ecommerce
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+    networks:
+      - ecommerce-net
