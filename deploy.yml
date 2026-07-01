@@ -1,0 +1,6 @@
+---
+- name: Deploy E-Commerce App
+  hosts: web
+  become: yes
+  roles:
+    - ecommerce

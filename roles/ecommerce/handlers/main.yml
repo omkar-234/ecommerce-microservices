@@ -1,0 +1,8 @@
+---
+- name: Check containers
+  shell: docker ps
+  register: result
+
+- name: Show containers
+  debug:
+    msg: "{{ result.stdout }}"

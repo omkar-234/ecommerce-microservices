@@ -1,0 +1,195 @@
+---
+- name: Install required packages
+  yum:
+    name:
+      - python3
+      - python3-pip
+      - postgresql15
+      - postgresql15-server
+      - postgresql15-devel
+      - git
+      - nodejs
+      - gcc
+      - gcc-c++
+      - make
+      - libffi-devel
+      - openssl-devel
+      - python3-devel
+      - openldap-devel
+    state: present
+
+- name: Initialize PostgreSQL
+  command: /usr/bin/postgresql-setup --initdb
+  args:
+    creates: /var/lib/pgsql/data/postgresql.conf
+
+- name: Ensure postgres uses peer authentication
+  lineinfile:
+    path: /var/lib/pgsql/data/pg_hba.conf
+    regexp: '^local\s+all\s+postgres'
+    line: 'local   all             postgres                                peer'
+
+- name: Ensure all local users use md5 authentication
+  lineinfile:
+    path: /var/lib/pgsql/data/pg_hba.conf
+    regexp: '^local\s+all\s+all'
+    line: 'local   all             all                                     md5'
+
+- name: Fix PostgreSQL host authentication
+  replace:
+    path: /var/lib/pgsql/data/pg_hba.conf
+    regexp: 'ident'
+    replace: 'md5'
+
+- name: Move postgres rule above local all rule
+  shell: |
+    awk '
+    /^local[[:space:]]+all[[:space:]]+postgres/ { p=$0; next }
+    /^local[[:space:]]+all[[:space:]]+all/ {
+      print p
+      print
+      next
+    }
+    { print }
+    ' /var/lib/pgsql/data/pg_hba.conf > /tmp/pg_hba.conf
+    mv /tmp/pg_hba.conf /var/lib/pgsql/data/pg_hba.conf
+
+- name: Restart PostgreSQL
+  service:
+    name: postgresql
+    state: restarted
+    enabled: yes
+
+- name: Create Odoo PostgreSQL user
+  become: yes
+  become_user: postgres
+  shell: |
+    psql -d postgres <<'EOF'
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT FROM pg_roles WHERE rolname='odoo'
+      ) THEN
+        CREATE USER odoo WITH PASSWORD 'odoo123' CREATEDB;
+      END IF;
+    END
+    $$;
+    EOF
+
+- name: Create Odoo PostgreSQL database
+  become: yes
+  become_user: postgres
+  shell: |
+    psql -tc "SELECT 1 FROM pg_database WHERE datname='odoodb'" | grep -q 1 || \
+    psql -c "CREATE DATABASE odoodb OWNER odoo;"
+
+- name: Create Odoo system user
+  user:
+    name: odoo
+    system: yes
+    home: /opt/odoo
+    shell: /bin/bash
+
+- name: Check if Odoo already cloned
+  stat:
+    path: /opt/odoo/odoo/odoo-bin
+  register: odoo_cloned
+
+- name: Clone Odoo source code
+  git:
+    repo: https://github.com/odoo/odoo.git
+    dest: /opt/odoo/odoo
+    version: "{{ odoo_version }}"
+    depth: 1
+    single_branch: yes
+    force: no
+  when: not odoo_cloned.stat.exists
+
+- name: Fix psycopg2 in requirements.txt
+  replace:
+    path: /opt/odoo/odoo/requirements.txt
+    regexp: 'psycopg2==2.8.5'
+    replace: 'psycopg2-binary==2.9.9'
+
+- name: Install psycopg2-binary
+  pip:
+    name: psycopg2-binary
+    executable: pip3
+
+- name: Install libsass
+  pip:
+    name: libsass
+    executable: pip3
+
+- name: Install certifi
+  pip:
+    name: certifi
+    executable: pip3
+
+- name: Check pip already done
+  stat:
+    path: /opt/odoo/.pip_done
+  register: pip_done
+
+- name: Install Odoo pip dependencies
+  pip:
+    requirements: /opt/odoo/odoo/requirements.txt
+    executable: pip3
+    extra_args: "--ignore-requires-python --no-deps --ignore-installed"
+  when: not pip_done.stat.exists
+
+- name: Mark pip as done
+  file:
+    path: /opt/odoo/.pip_done
+    state: touch
+  when: not pip_done.stat.exists
+
+- name: Create log directory
+  file:
+    path: /var/log/odoo
+    state: directory
+    owner: odoo
+    group: odoo
+
+- name: Deploy Odoo config file
+  template:
+    src: odoo.conf.j2
+    dest: /etc/odoo.conf
+    owner: odoo
+    group: odoo
+    mode: "0640"
+
+- name: Deploy Odoo systemd service
+  template:
+    src: odoo.service.j2
+    dest: /etc/systemd/system/odoo.service
+
+- name: Reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: Check if Odoo database is initialized
+  become: yes
+  become_user: postgres
+  shell: |
+    psql -d odoodb -tAc "SELECT 1 FROM pg_tables WHERE tablename='ir_module_module';"
+  register: db_init
+  failed_when: false
+  changed_when: false
+
+- name: Initialize Odoo database
+  become: yes
+  become_user: odoo
+  command: >
+    /opt/odoo/odoo/odoo-bin
+    -c /etc/odoo.conf
+    -d odoodb
+    -i base
+    --stop-after-init
+  when: db_init.stdout != "1"
+
+- name: Start and enable Odoo
+  service:
+    name: odoo
+    state: started
+    enabled: yes

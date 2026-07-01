@@ -1,0 +1,12 @@
+---
+# defaults file for /home/omkarbachche8022/ansible-project/roles/odoo
+odoo_version: "14.0"
+odoo_user: odoo
+odoo_home: /opt/odoo
+odoo_config: /etc/odoo.conf
+odoo_log: /var/log/odoo/odoo.log
+odoo_port: 8069
+db_host: localhost
+db_user: odoo
+db_password: odoo123
+db_name: odoodb
