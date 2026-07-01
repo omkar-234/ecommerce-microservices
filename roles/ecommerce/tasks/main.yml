@@ -37,5 +37,4 @@
 - name: Deploy App
   shell: |
     cd {{ app_dir }}
-    docker compose up -d --build
-  notify: Check containers
+    docker-compose up -d --build
