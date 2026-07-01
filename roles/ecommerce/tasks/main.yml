@@ -27,6 +27,14 @@
     chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
     ln -sf /usr/local/lib/docker/cli-plugins/docker-compose /usr/bin/docker-compose
 
+- name: Stop old nginx if running
+  shell: systemctl stop nginx || true
+  ignore_errors: yes
+
+- name: Kill anything on port 80
+  shell: fuser -k 80/tcp || true
+  ignore_errors: yes
+
 - name: Remove old directory
   file:
     path: "{{ app_dir }}"
@@ -62,5 +70,5 @@
 - name: Start Nginx
   service:
     name: nginx
-    state: restarted
+    state: started
     enabled: yes
