@@ -1,4 +1,0 @@
----
-# Default values - easily override hote vars madhe
-app_name: "My Ansible Website"
-environment: "development"

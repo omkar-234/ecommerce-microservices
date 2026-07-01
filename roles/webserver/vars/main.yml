@@ -1,7 +1,0 @@
----
-http_port: 80
-max_clients: 200
-server_admin: "omkarbachche8022@gmail.com"
-app_name: "Omkar's Ansible Website"
-app_version: "2.0"
-deploy_env: "production"
